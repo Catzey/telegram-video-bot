@@ -30,11 +30,12 @@ except Exception as e:
     await update.message.reply_text(str(e))
 ```
 
-def main():
+async def main():
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
 print("Bot started")
-app.run_polling()
+await app.run_polling()
 
 if **name** == "**main**":
-main()
+import asyncio
+asyncio.run(main())
