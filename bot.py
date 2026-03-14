@@ -19,27 +19,22 @@ ydl_opts = {
 try:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        file_path = ydl.prepare_filename(info)
+        filename = ydl.prepare_filename(info)
 
-    with open(file_path, "rb") as video:
-        await update.message.reply_document(document=video)
+    with open(filename, "rb") as f:
+        await update.message.reply_document(document=f)
 
-    os.remove(file_path)
+    os.remove(filename)
 
 except Exception as e:
-    await update.message.reply_text(f"Error: {e}")
+    await update.message.reply_text(str(e))
 ```
 
 def main():
 app = ApplicationBuilder().token(TOKEN).build()
-
-```
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-
 print("Bot started")
-
 app.run_polling()
-```
 
 if **name** == "**main**":
 main()
