@@ -5,14 +5,15 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 TOKEN = os.environ["BOT_TOKEN"]
 
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-url = update.message.text
-await update.message.reply_text("Received link: " + url)
+message = update.message.text
+await update.message.reply_text("Received: " + message)
 
-def main():
+async def main():
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT, handle))
 print("Bot started")
-app.run_polling()
+await app.run_polling()
 
 if **name** == "**main**":
-main()
+import asyncio
+asyncio.run(main())
