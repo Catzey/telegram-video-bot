@@ -1,7 +1,7 @@
 import os
 import yt_dlp
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -11,13 +11,16 @@ if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
 async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text
+    url = update.message.text.strip()
 
     await update.message.reply_text("Downloading video... ⏳")
 
     ydl_opts = {
-        'outtmpl': f'{DOWNLOAD_FOLDER}/%(title)s.%(ext)s',
-        'format': 'mp4',
+        "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
+        "format": "bestvideo+bestaudio/best",
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "quiet": True,
     }
 
     try:
@@ -25,19 +28,20 @@ async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             info = ydl.extract_info(url, download=True)
             file_path = ydl.prepare_filename(info)
 
-        await update.message.reply_video(video=open(file_path, 'rb'))
+        await update.message.reply_video(video=open(file_path, "rb"))
 
         os.remove(file_path)
 
     except Exception as e:
-        await update.message.reply_text("Failed to download video ❌")
+        print(e)
+        await update.message.reply_text("❌ Failed to download video")
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
 
-    print("Downloader Bot Started 🚀")
+    print("Video Downloader Bot Started 🚀")
 
     app.run_polling()
 
