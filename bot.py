@@ -11,22 +11,41 @@ MAX_SIZE_MB = 45
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
+def choose_format(url):
+
+    url = url.lower()
+
+    if "youtube.com" in url or "youtu.be" in url:
+        return "bestvideo+bestaudio/best"
+
+    if "instagram.com" in url:
+        return "best"
+
+    if "tiktok.com" in url:
+        return "best"
+
+    if "facebook.com" in url or "fb.watch" in url:
+        return "best"
+
+    return "best"
+
+
 async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     url = update.message.text.strip()
 
     msg = await update.message.reply_text("⚡ Processing link...")
 
+    video_format = choose_format(url)
+
     ydl_opts = {
-        "format": "bestvideo+bestaudio/best",
+        "format": video_format,
         "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
         "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": True,
         "nocheckcertificate": True,
         "geo_bypass": True,
-
-        # speed improvements
         "concurrent_fragment_downloads": 5,
         "retries": 3,
         "fragment_retries": 3
@@ -44,7 +63,6 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        # if file too big → send direct download link
         if size_mb > MAX_SIZE_MB:
 
             os.remove(file_path)
@@ -99,7 +117,7 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 Fast Universal Downloader Bot Running")
+    print("🚀 Smart Downloader Bot Running")
 
     app.run_polling()
 
