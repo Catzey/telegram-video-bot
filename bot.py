@@ -15,16 +15,21 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     url = update.message.text.strip()
 
-    msg = await update.message.reply_text("🔎 Detecting media...")
+    msg = await update.message.reply_text("⚡ Processing link...")
 
     ydl_opts = {
-        "format": "best",
+        "format": "best[ext=mp4]/best",
         "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
         "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": True,
         "nocheckcertificate": True,
-        "geo_bypass": True
+        "geo_bypass": True,
+
+        # speed improvements
+        "concurrent_fragment_downloads": 5,
+        "retries": 3,
+        "fragment_retries": 3
     }
 
     try:
@@ -32,9 +37,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("📥 Downloading...")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-
             info = ydl.extract_info(url, download=True)
-
             file_path = ydl.prepare_filename(info)
 
         title = info.get("title", "Video")
@@ -45,24 +48,20 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             os.remove(file_path)
 
-            await msg.edit_text("📦 File too large. Generating direct download link...")
+            await msg.edit_text("📦 File too large. Creating download link...")
 
             with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
 
                 info = ydl.extract_info(url, download=False)
 
-                formats = info.get("formats", [])
-
                 video_url = None
 
-                for f in formats:
+                for f in info.get("formats", []):
                     if f.get("ext") == "mp4":
                         video_url = f.get("url")
                         break
 
-            keyboard = [
-                [InlineKeyboardButton("⬇️ Download Video", url=video_url)]
-            ]
+            keyboard = [[InlineKeyboardButton("⬇️ Download Video", url=video_url)]]
 
             await msg.edit_text(
                 f"🎬 {title}",
@@ -86,7 +85,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         print(e)
 
-        await msg.edit_text("❌ Failed to download media")
+        await msg.edit_text("❌ Download failed")
 
 
 def main():
@@ -97,7 +96,7 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 Auto Downloader Bot Running")
+    print("🚀 Fast Downloader Bot Running")
 
     app.run_polling()
 
