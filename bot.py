@@ -19,7 +19,6 @@ MAX_SIZE_MB = 45
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
@@ -31,17 +30,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• TikTok\n\n"
         "Example:\n"
         "https://youtube.com/watch?v=xxxx\n\n"
-        "I'll download the video for you."
+        "I will download the video for you."
     )
 
 
-# choose best format for platform
 def choose_format(url):
 
     url = url.lower()
 
     if "youtube.com" in url or "youtu.be" in url:
-        return "bv*[ext=mp4]+ba/b"
+        return "bestvideo+bestaudio/best"
 
     if "instagram.com" in url:
         return "best"
@@ -61,14 +59,13 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = await update.message.reply_text("🔎 Processing link...")
 
-    # detect link inside message
     link_match = re.search(r'https?://\S+', text)
 
     if not link_match:
 
         await msg.edit_text(
             "❌ I couldn't find a valid video link.\n\n"
-            "📎 Please send a link from:\n"
+            "Send a link from:\n"
             "• YouTube\n"
             "• Instagram\n"
             "• Facebook\n"
@@ -76,7 +73,6 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Example:\n"
             "https://youtube.com/watch?v=xxxx"
         )
-
         return
 
     url = link_match.group(0)
@@ -91,7 +87,6 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "quiet": True,
         "nocheckcertificate": True,
         "geo_bypass": True,
-        "concurrent_fragment_downloads": 5,
         "retries": 5,
         "fragment_retries": 5
     }
@@ -112,7 +107,6 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        # if video too large → create download button
         if size_mb > MAX_SIZE_MB:
 
             os.remove(file_path)
@@ -130,7 +124,6 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 video_url = None
 
                 for f in info.get("formats", []):
-
                     if f.get("url") and f.get("ext") in ["mp4", "m4v"]:
                         video_url = f["url"]
                         break
