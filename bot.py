@@ -5,7 +5,6 @@ from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filte
 TOKEN = os.environ.get("BOT_TOKEN")
 
 async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
     await update.message.reply_text("Bot working!")
 
 def main():
@@ -13,7 +12,8 @@ def main():
 
     app.add_handler(MessageHandler(filters.ALL, reply))
 
-    print("Bot started...")
+    print("Bot started")
+
     app.run_polling()
 
 if __name__ == "__main__":
