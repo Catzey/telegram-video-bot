@@ -18,12 +18,12 @@ MAX_SIZE_MB = 45
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-# Welcome message
+# Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👋 Welcome!\n\n"
-        "Send me a video link from:\n"
+        "Send a video link from:\n"
         "• YouTube\n"
         "• Instagram\n"
         "• Facebook\n"
@@ -82,19 +82,25 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_text("📥 Downloading...")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, url, True)
+
+            info = await asyncio.to_thread(
+                ydl.extract_info, url, True
+            )
+
             file_path = ydl.prepare_filename(info)
 
         title = info.get("title", "Video")
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        # If file too big → send download link instead
+        # If file too large → create direct download button
         if size_mb > MAX_SIZE_MB:
 
             os.remove(file_path)
 
-            await msg.edit_text("📦 File too large. Creating download link...")
+            await msg.edit_text(
+                "📦 Video too large for Telegram.\nGenerating download link..."
+            )
 
             with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
 
@@ -105,8 +111,9 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 video_url = None
 
                 for f in info.get("formats", []):
-                    if f.get("ext") == "mp4":
-                        video_url = f.get("url")
+
+                    if f.get("url") and f.get("ext") in ["mp4", "m4v"]:
+                        video_url = f["url"]
                         break
 
             keyboard = [
@@ -153,7 +160,7 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 Smart Downloader Bot Running")
+    print("🚀 Stable Downloader Bot Running")
 
     app.run_polling()
 
