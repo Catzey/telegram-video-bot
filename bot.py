@@ -1,114 +1,70 @@
 import os
 import yt_dlp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
-)
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 TOKEN = os.getenv("BOT_TOKEN")
+DOWNLOAD_DIR = "downloads"
+MAX_SIZE_MB = 45  # keep below Telegram limits for safety
 
-DOWNLOAD_FOLDER = "downloads"
-
-if not os.path.exists(DOWNLOAD_FOLDER):
-    os.makedirs(DOWNLOAD_FOLDER)
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
+async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
 
-    context.user_data["url"] = url
+    status = await update.message.reply_text("🔎 Checking link...")
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🎬 Download Video", callback_data="video"),
-            InlineKeyboardButton("🎵 Download Audio", callback_data="audio")
-        ]
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "Choose download type:",
-        reply_markup=reply_markup
-    )
-
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    url = context.user_data.get("url")
-
-    await query.edit_message_text("📥 Downloading...")
-
-    if query.data == "video":
-
-        ydl_opts = {
-            "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
-            "format": "best[ext=mp4]/best",
-            "noplaylist": True,
-            "quiet": True
-        }
-
-    else:
-
-        ydl_opts = {
-            "outtmpl": f"{DOWNLOAD_FOLDER}/%(title)s.%(ext)s",
-            "format": "bestaudio/best",
-            "quiet": True
-        }
+    ydl_opts = {
+        "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+        "format": "best",
+        "noplaylist": True,
+        "quiet": True,
+        "merge_output_format": "mp4",
+        "nocheckcertificate": True,
+        "geo_bypass": True
+    }
 
     try:
+        await status.edit_text("📥 Downloading...")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-
             info = ydl.extract_info(url, download=True)
             file_path = ydl.prepare_filename(info)
-            title = info.get("title", "media")
 
-        await query.edit_message_text("📤 Uploading...")
+        size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        if query.data == "video":
-
-            await query.message.reply_video(
-                video=open(file_path, "rb"),
-                caption=f"✅ {title}"
+        if size_mb > MAX_SIZE_MB:
+            os.remove(file_path)
+            await status.edit_text(
+                f"⚠️ Video too large ({size_mb:.1f}MB).\nTry a shorter video."
             )
+            return
 
-        else:
+        await status.edit_text("📤 Uploading...")
 
-            await query.message.reply_audio(
-                audio=open(file_path, "rb"),
-                caption=f"🎵 {title}"
-            )
+        await update.message.reply_video(
+            video=open(file_path, "rb"),
+            caption=f"✅ {info.get('title','Video')}"
+        )
 
         os.remove(file_path)
 
-    except Exception as e:
+        await status.delete()
 
+    except Exception as e:
         print(e)
-        await query.edit_message_text("❌ Download failed")
+        await status.edit_text("❌ Download failed")
 
 
 def main():
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, download_video)
     )
 
-    app.add_handler(
-        CallbackQueryHandler(button_handler)
-    )
-
-    print("🚀 Downloader Bot Started")
+    print("🚀 Ultimate Downloader Bot Running")
 
     app.run_polling()
 
