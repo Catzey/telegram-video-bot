@@ -18,7 +18,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("⚡ Processing link...")
 
     ydl_opts = {
-        "format": "best[ext=mp4]/best",
+        "format": "bestvideo+bestaudio/best",
         "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
         "merge_output_format": "mp4",
         "noplaylist": True,
@@ -44,6 +44,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
+        # if file too big → send direct download link
         if size_mb > MAX_SIZE_MB:
 
             os.remove(file_path)
@@ -61,7 +62,9 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         video_url = f.get("url")
                         break
 
-            keyboard = [[InlineKeyboardButton("⬇️ Download Video", url=video_url)]]
+            keyboard = [
+                [InlineKeyboardButton("⬇️ Download Video", url=video_url)]
+            ]
 
             await msg.edit_text(
                 f"🎬 {title}",
@@ -96,7 +99,7 @@ def main():
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 Fast Downloader Bot Running")
+    print("🚀 Fast Universal Downloader Bot Running")
 
     app.run_polling()
 
