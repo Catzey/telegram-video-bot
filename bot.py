@@ -1,6 +1,7 @@
 import os
 import yt_dlp
 import asyncio
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -18,7 +19,7 @@ MAX_SIZE_MB = 45
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-# Start command
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
@@ -28,17 +29,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Instagram\n"
         "• Facebook\n"
         "• TikTok\n\n"
-        "I will download the video for you."
+        "Example:\n"
+        "https://youtube.com/watch?v=xxxx\n\n"
+        "I'll download the video for you."
     )
 
 
-# Choose best format depending on platform
+# choose best format for platform
 def choose_format(url):
 
     url = url.lower()
 
     if "youtube.com" in url or "youtu.be" in url:
-        return "bestvideo+bestaudio/best"
+        return "bv*[ext=mp4]+ba/b"
 
     if "instagram.com" in url:
         return "best"
@@ -54,13 +57,29 @@ def choose_format(url):
 
 async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    url = update.message.text.strip()
+    text = update.message.text
 
     msg = await update.message.reply_text("🔎 Processing link...")
 
-    if "http" not in url:
-        await msg.edit_text("❌ Please send a valid video link.")
+    # detect link inside message
+    link_match = re.search(r'https?://\S+', text)
+
+    if not link_match:
+
+        await msg.edit_text(
+            "❌ I couldn't find a valid video link.\n\n"
+            "📎 Please send a link from:\n"
+            "• YouTube\n"
+            "• Instagram\n"
+            "• Facebook\n"
+            "• TikTok\n\n"
+            "Example:\n"
+            "https://youtube.com/watch?v=xxxx"
+        )
+
         return
+
+    url = link_match.group(0)
 
     video_format = choose_format(url)
 
@@ -73,8 +92,8 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "nocheckcertificate": True,
         "geo_bypass": True,
         "concurrent_fragment_downloads": 5,
-        "retries": 3,
-        "fragment_retries": 3
+        "retries": 5,
+        "fragment_retries": 5
     }
 
     try:
@@ -93,7 +112,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        # If file too large → create direct download button
+        # if video too large → create download button
         if size_mb > MAX_SIZE_MB:
 
             os.remove(file_path)
