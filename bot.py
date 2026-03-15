@@ -5,6 +5,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 TOKEN = os.environ.get("BOT_TOKEN")
 
 async def reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
     await update.message.reply_text("Bot working!")
 
 app = ApplicationBuilder().token(TOKEN).build()
