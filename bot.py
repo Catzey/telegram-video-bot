@@ -1,65 +1,53 @@
 import os
 import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 
 TOKEN = os.getenv("BOT_TOKEN")
+
 DOWNLOAD_DIR = "downloads"
+MAX_SIZE_MB = 45
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 
-async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     url = update.message.text.strip()
-    context.user_data["url"] = url
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🎬 Video 360p", callback_data="360"),
-            InlineKeyboardButton("🎬 Video 720p", callback_data="720"),
-        ],
-        [
-            InlineKeyboardButton("🎬 Video 1080p", callback_data="1080"),
-        ],
-        [
-            InlineKeyboardButton("🎵 Audio (MP3)", callback_data="audio")
-        ],
-        [
-            InlineKeyboardButton("🔗 Direct Download Link", callback_data="link")
-        ]
-    ]
+    msg = await update.message.reply_text("🔎 Detecting media...")
 
-    await update.message.reply_text(
-        "Choose download option:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    ydl_opts = {
+        "format": "best",
+        "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+        "merge_output_format": "mp4",
+        "noplaylist": True,
+        "quiet": True,
+        "nocheckcertificate": True,
+        "geo_bypass": True
+    }
 
+    try:
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await msg.edit_text("📥 Downloading...")
 
-    query = update.callback_query
-    await query.answer()
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
-    url = context.user_data.get("url")
+            info = ydl.extract_info(url, download=True)
 
-    await query.edit_message_text("🔎 Processing...")
+            file_path = ydl.prepare_filename(info)
 
-    option = query.data
+        title = info.get("title", "Video")
 
-    if option == "link":
+        size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        ydl_opts = {
-            "quiet": True
-        }
+        if size_mb > MAX_SIZE_MB:
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            os.remove(file_path)
+
+            await msg.edit_text("📦 File too large. Generating direct download link...")
+
+            with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
 
                 info = ydl.extract_info(url, download=False)
 
@@ -73,74 +61,32 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         break
 
             keyboard = [
-                [InlineKeyboardButton("⬇️ Download", url=video_url)]
+                [InlineKeyboardButton("⬇️ Download Video", url=video_url)]
             ]
 
-            await query.edit_message_text(
-                f"🎬 {info.get('title','Video')}",
+            await msg.edit_text(
+                f"🎬 {title}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
-        except:
-            await query.edit_message_text("❌ Failed to fetch link")
+            return
 
-        return
+        await msg.edit_text("📤 Uploading...")
 
-    if option == "audio":
-
-        ydl_opts = {
-            "format": "bestaudio/best",
-            "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
-            "quiet": True
-        }
-
-    else:
-
-        quality_map = {
-            "360": "bestvideo[height<=360]+bestaudio/best",
-            "720": "bestvideo[height<=720]+bestaudio/best",
-            "1080": "bestvideo[height<=1080]+bestaudio/best"
-        }
-
-        ydl_opts = {
-            "format": quality_map.get(option, "best"),
-            "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
-            "merge_output_format": "mp4",
-            "quiet": True
-        }
-
-    try:
-
-        await query.edit_message_text("📥 Downloading...")
-
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info)
-
-        await query.edit_message_text("📤 Uploading...")
-
-        if option == "audio":
-
-            await query.message.reply_audio(
-                audio=open(file_path, "rb"),
-                caption=info.get("title", "Audio")
-            )
-
-        else:
-
-            await query.message.reply_video(
-                video=open(file_path, "rb"),
-                caption=info.get("title", "Video")
-            )
+        await update.message.reply_video(
+            video=open(file_path, "rb"),
+            caption=f"✅ {title}"
+        )
 
         os.remove(file_path)
 
-        await query.delete_message()
+        await msg.delete()
 
     except Exception as e:
 
         print(e)
-        await query.edit_message_text("❌ Download failed")
+
+        await msg.edit_text("❌ Failed to download media")
 
 
 def main():
@@ -148,14 +94,10 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    app.add_handler(
-        CallbackQueryHandler(button_handler)
-    )
-
-    print("🚀 All-in-One Downloader Bot Running")
+    print("🚀 Auto Downloader Bot Running")
 
     app.run_polling()
 
