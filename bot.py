@@ -130,7 +130,6 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 video_url = None
 
                 for f in info.get("formats", []):
-
                     if f.get("url") and f.get("ext") in ["mp4", "m4v"]:
                         video_url = f["url"]
                         break
@@ -181,7 +180,11 @@ def main():
 
     print("🚀 Stable Downloader Bot Running")
 
-    app.run_polling()
+    app.run_polling(
+        poll_interval=2,
+        timeout=30,
+        bootstrap_retries=5
+    )
 
 
 if __name__ == "__main__":
