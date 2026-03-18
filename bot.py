@@ -2,6 +2,8 @@ import os
 import yt_dlp
 import asyncio
 import re
+import time
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -18,173 +20,139 @@ MAX_SIZE_MB = 80
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# Anti-spam
+user_last_request = {}
+
+def is_spam(user_id):
+    now = time.time()
+    if user_id in user_last_request:
+        if now - user_last_request[user_id] < 5:
+            return True
+    user_last_request[user_id] = now
+    return False
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
     await update.message.reply_text(
         "👋 Welcome!\n\n"
-        "Send a video link from:\n"
-        "• YouTube\n"
-        "• Instagram\n"
-        "• Facebook\n"
-        "• TikTok\n\n"
-        "Example:\n"
-        "https://youtube.com/watch?v=xxxx\n\n"
-        "I'll download the video for you."
+        "Send a video link (YouTube, Instagram, Facebook, TikTok)\n\n"
+        "For MP3:\n"
+        "Send: mp3 <link>"
     )
 
 
-def choose_format(url):
+def choose_format(url, is_audio=False):
+    if is_audio:
+        return "bestaudio"
 
-    url = url.lower()
+    return "bestvideo[height<=720]+bestaudio/best[height<=720]"
 
-    if "youtube.com" in url or "youtu.be" in url:
-        return "bv*+ba/b"
 
-    if "instagram.com" in url:
-        return "best"
-
-    if "facebook.com" in url or "fb.watch" in url:
-        return "best"
-
-    if "tiktok.com" in url:
-        return "best"
-
-    return "best"
+def progress_hook(d):
+    if d['status'] == 'downloading':
+        percent = d.get('_percent_str', '0%')
+        print(f"Downloading {percent}")
 
 
 async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    text = update.message.text
+    user_id = update.effective_user.id
 
-    msg = await update.message.reply_text("🔎 Processing link...")
+    if is_spam(user_id):
+        await update.message.reply_text("⏳ Please wait a few seconds...")
+        return
+
+    text = update.message.text
+    msg = await update.message.reply_text("🔎 Processing...")
 
     link_match = re.search(r'https?://\S+', text)
 
     if not link_match:
-
-        await msg.edit_text(
-            "❌ I couldn't find a valid video link.\n\n"
-            "Send a link from:\n"
-            "• YouTube\n"
-            "• Instagram\n"
-            "• Facebook\n"
-            "• TikTok\n\n"
-            "Example:\n"
-            "https://youtube.com/watch?v=xxxx"
-        )
+        await msg.edit_text("❌ Send a valid video link.")
         return
 
     url = link_match.group(0)
 
-    video_format = choose_format(url)
+    is_audio = text.lower().startswith("mp3")
 
     ydl_opts = {
-        "format": video_format,
-        "format_sort": ["res", "ext:mp4:m4a"],
-        "outtmpl": f"{DOWNLOAD_DIR}/%(title)s.%(ext)s",
+        "format": choose_format(url, is_audio),
+        "outtmpl": f"{DOWNLOAD_DIR}/%(title).50s.%(ext)s",
+        "restrictfilenames": True,
         "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": True,
         "nocheckcertificate": True,
         "geo_bypass": True,
+        "socket_timeout": 15,
         "retries": 5,
-        "fragment_retries": 5,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web"]
-            }
-        }
+        "progress_hooks": [progress_hook],
     }
 
-    try:
+    if is_audio:
+        ydl_opts["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+        }]
 
+    try:
         await msg.edit_text("📥 Downloading...")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-
-            info = await asyncio.to_thread(
-                ydl.extract_info, url, True
-            )
-
+            info = await asyncio.to_thread(ydl.extract_info, url, True)
             file_path = ydl.prepare_filename(info)
 
-        title = info.get("title", "Video")
+        title = info.get("title", "Media")
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
         if size_mb > MAX_SIZE_MB:
-
             os.remove(file_path)
 
-            await msg.edit_text(
-                "📦 Video too large for Telegram.\nGenerating download link..."
-            )
+            await msg.edit_text("📦 File too large. Generating link...")
 
             with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+                info = await asyncio.to_thread(ydl.extract_info, url, False)
 
-                info = await asyncio.to_thread(
-                    ydl.extract_info, url, False
-                )
-
-                video_url = None
-
-                for f in info.get("formats", []):
-                    if f.get("url") and f.get("ext") in ["mp4", "m4v"]:
-                        video_url = f["url"]
-                        break
+            video_url = info.get("url")
 
             keyboard = [
-                [InlineKeyboardButton("⬇️ Download Video", url=video_url)]
+                [InlineKeyboardButton("⬇️ Download", url=video_url)]
             ]
 
             await msg.edit_text(
                 f"🎬 {title}",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
-
             return
 
         await msg.edit_text("📤 Uploading...")
 
-        await update.message.reply_video(
-            video=open(file_path, "rb"),
-            caption=f"✅ {title}"
-        )
+        with open(file_path, "rb") as f:
+            if is_audio:
+                await update.message.reply_audio(audio=f, caption=f"🎵 {title}")
+            else:
+                await update.message.reply_video(video=f, caption=f"✅ {title}")
 
         os.remove(file_path)
-
         await msg.delete()
 
-        await update.message.reply_text("📎 Send another link anytime!")
-
     except Exception as e:
-
-        print(e)
-
-        await msg.edit_text(
-            "❌ Couldn't download this link.\n"
-            "Make sure the video is public and try again."
-        )
+        print("ERROR:", str(e))
+        await msg.edit_text("❌ Failed. Try another link.")
 
 
 def main():
-
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 Stable Downloader Bot Running")
+    print("🚀 PRO Downloader Bot Running")
 
-    app.run_polling(
-        poll_interval=2,
-        timeout=30,
-        bootstrap_retries=5
-    )
+    app.run_polling(poll_interval=2)
 
 
 if __name__ == "__main__":
