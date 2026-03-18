@@ -73,7 +73,7 @@ def choose_format(url, is_audio=False):
         return "best"
 
     if "youtube.com" in url or "youtu.be" in url:
-        return "bestvideo[height<=720]+bestaudio/best[height<=720]"
+        return "best[ext=mp4][height<=720]/best"
 
     return "best"
 
@@ -107,13 +107,26 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "quiet": True,
         "nocheckcertificate": True,
         "geo_bypass": True,
-        "socket_timeout": 15,
-        "retries": 5,
-    }
 
-    # Instagram fix
-    ydl_opts["extractor_args"] = {
-        "instagram": {"api_version": "v1"}
+        # SPEED + STABILITY
+        "socket_timeout": 20,
+        "retries": 10,
+        "fragment_retries": 10,
+        "skip_unavailable_fragments": True,
+
+        # YOUTUBE FIX
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0"
+        },
+
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web"]
+            },
+            "instagram": {
+                "api_version": "v1"
+            }
+        }
     }
 
     # MP3 option
@@ -170,19 +183,19 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("ERROR:", str(e))
         await msg.edit_text("❌ Failed. Try another link.")
 
-# ------------------- MAIN (FIXED) -------------------
+# ------------------- MAIN -------------------
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # FIX conflict issue
-    app.bot.delete_webhook(drop_pending_updates=True)
+    # FIX webhook issue
+    asyncio.run(app.bot.delete_webhook(drop_pending_updates=True))
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 FINAL BOT RUNNING")
+    print("🚀 FINAL FAST BOT RUNNING")
 
     app.run_polling()
 
