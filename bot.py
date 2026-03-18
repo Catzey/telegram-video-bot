@@ -22,7 +22,7 @@ MAX_SIZE_MB = 80
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# ------------------- KEEP ALIVE SERVER -------------------
+# ------------------- KEEP ALIVE -------------------
 app_web = Flask(__name__)
 
 @app_web.route("/")
@@ -55,7 +55,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Send: mp3 <link>"
     )
 
-# ------------------- FORMAT SELECT -------------------
+# ------------------- FORMAT -------------------
 def choose_format(url, is_audio=False):
 
     url = url.lower()
@@ -134,7 +134,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
-        # If too large → give link
+        # Large file → link
         if size_mb > MAX_SIZE_MB:
             os.remove(file_path)
 
@@ -170,11 +170,12 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("ERROR:", str(e))
         await msg.edit_text("❌ Failed. Try another link.")
 
-# ------------------- MAIN -------------------
-async def main():
+# ------------------- MAIN (FIXED) -------------------
+def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    await app.bot.delete_webhook(drop_pending_updates=True)
+    # FIX conflict issue
+    app.bot.delete_webhook(drop_pending_updates=True)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
@@ -183,7 +184,8 @@ async def main():
 
     print("🚀 FINAL BOT RUNNING")
 
-    await app.run_polling()
+    app.run_polling()
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
