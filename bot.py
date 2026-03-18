@@ -183,12 +183,17 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("ERROR:", str(e))
         await msg.edit_text("❌ Failed. Try another link.")
 
-# ------------------- MAIN -------------------
+# ------------------- MAIN (FINAL FIX) -------------------
 def main():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # FIX webhook issue
-    asyncio.run(app.bot.delete_webhook(drop_pending_updates=True))
+    # FIX webhook safely
+    loop.run_until_complete(
+        app.bot.delete_webhook(drop_pending_updates=True)
+    )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
