@@ -3,7 +3,9 @@ import yt_dlp
 import asyncio
 import re
 import time
+import threading
 
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -20,7 +22,20 @@ MAX_SIZE_MB = 80
 
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# Anti-spam
+# ------------------- KEEP ALIVE SERVER -------------------
+app_web = Flask(__name__)
+
+@app_web.route("/")
+def home():
+    return "Bot is alive ✅"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    app_web.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_web).start()
+
+# ------------------- ANTI SPAM -------------------
 user_last_request = {}
 
 def is_spam(user_id):
@@ -31,35 +46,44 @@ def is_spam(user_id):
     user_last_request[user_id] = now
     return False
 
-
+# ------------------- START -------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Welcome!\n\n"
-        "Send a video link (YouTube, Instagram, Facebook, TikTok)\n\n"
+        "Send video link (YouTube / Instagram / Facebook / TikTok)\n\n"
         "For MP3:\n"
         "Send: mp3 <link>"
     )
 
-
+# ------------------- FORMAT SELECT -------------------
 def choose_format(url, is_audio=False):
+
+    url = url.lower()
+
     if is_audio:
         return "bestaudio"
 
-    return "bestvideo[height<=720]+bestaudio/best[height<=720]"
+    if "instagram.com" in url:
+        return "best"
 
+    if "facebook.com" in url or "fb.watch" in url:
+        return "best"
 
-def progress_hook(d):
-    if d['status'] == 'downloading':
-        percent = d.get('_percent_str', '0%')
-        print(f"Downloading {percent}")
+    if "tiktok.com" in url:
+        return "best"
 
+    if "youtube.com" in url or "youtu.be" in url:
+        return "bestvideo[height<=720]+bestaudio/best[height<=720]"
 
+    return "best"
+
+# ------------------- DOWNLOAD -------------------
 async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
     if is_spam(user_id):
-        await update.message.reply_text("⏳ Please wait a few seconds...")
+        await update.message.reply_text("⏳ Wait a few seconds...")
         return
 
     text = update.message.text
@@ -68,11 +92,10 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     link_match = re.search(r'https?://\S+', text)
 
     if not link_match:
-        await msg.edit_text("❌ Send a valid video link.")
+        await msg.edit_text("❌ Send a valid link.")
         return
 
     url = link_match.group(0)
-
     is_audio = text.lower().startswith("mp3")
 
     ydl_opts = {
@@ -86,9 +109,14 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "geo_bypass": True,
         "socket_timeout": 15,
         "retries": 5,
-        "progress_hooks": [progress_hook],
     }
 
+    # Instagram fix
+    ydl_opts["extractor_args"] = {
+        "instagram": {"api_version": "v1"}
+    }
+
+    # MP3 option
     if is_audio:
         ydl_opts["postprocessors"] = [{
             "key": "FFmpegExtractAudio",
@@ -106,6 +134,7 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         size_mb = os.path.getsize(file_path) / (1024 * 1024)
 
+        # If too large → give link
         if size_mb > MAX_SIZE_MB:
             os.remove(file_path)
 
@@ -130,9 +159,9 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         with open(file_path, "rb") as f:
             if is_audio:
-                await update.message.reply_audio(audio=f, caption=f"🎵 {title}")
+                await update.message.reply_audio(f, caption=f"🎵 {title}")
             else:
-                await update.message.reply_video(video=f, caption=f"✅ {title}")
+                await update.message.reply_video(f, caption=f"✅ {title}")
 
         os.remove(file_path)
         await msg.delete()
@@ -141,19 +170,20 @@ async def auto_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("ERROR:", str(e))
         await msg.edit_text("❌ Failed. Try another link.")
 
-
-def main():
+# ------------------- MAIN -------------------
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
+
+    await app.bot.delete_webhook(drop_pending_updates=True)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, auto_download)
     )
 
-    print("🚀 PRO Downloader Bot Running")
+    print("🚀 FINAL BOT RUNNING")
 
-    app.run_polling(poll_interval=2)
-
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
